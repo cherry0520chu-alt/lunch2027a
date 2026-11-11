@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2027 聚餐統計調查</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fcf8f2',
+              100: '#f6ece0',
+              200: '#ebd6bf',
+              500: '#b87d4b',
+              600: '#9d6335',
+              700: '#7e4d29',
+              800: '#462b17',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+    }
+    .mobile-container {
+      width: 100%;
+      max-width: 480px;
+      min-height: 100vh;
+      background-color: #ffffff;
+      box-shadow: 0 0 25px rgba(0, 0, 0, 0.06);
+    }
+    .progress-bar-fill {
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* 選中時的黑色實心點點與高對比勾選指示 */
+    input[type="radio"], input[type="checkbox"] {
+      accent-color: #000000;
+    }
+    .radio-circle-box {
+      width: 22px;
+      height: 22px;
+      border-radius: 9999px;
+      border: 2px solid #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      background-color: #ffffff;
+    }
+    .radio-circle-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 9999px;
+      background-color: #000000;
+      opacity: 0;
+      transform: scale(0.3);
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    input[type="radio"]:checked ~ div .radio-circle-box {
+      border-color: #000000;
+    }
+    input[type="radio"]:checked ~ div .radio-circle-dot {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .checkbox-indicator-box {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      border: 2px solid #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      background-color: #ffffff;
+      color: transparent;
+    }
+    input[type="checkbox"]:checked ~ div .checkbox-indicator-box {
+      background-color: #000000;
+      border-color: #000000;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-brand-200">
+
+  <div class="mobile-container flex flex-col">
+    <!-- Header Banner -->
+    <header class="w-full bg-white border-b border-slate-100 sticky top-0 z-30 shadow-xs">
+      <div class="px-4 py-3 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-brand-500 text-white flex items-center justify-center shadow-xs shrink-0">
+            <i class="ph-bold ph-fork-knife text-lg"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h1 class="text-base font-bold text-slate-800 tracking-tight leading-snug">
+                2027 聚餐統計
+              </h1>
+              <span id="cloudStatusBadge" class="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>雲端連線
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">一人一票 ‧ 榮榮園及日期調查</p>
+          </div>
+        </div>
+
+        <!-- Tab Switcher -->
+        <div class="flex items-center bg-slate-100 p-0.5 rounded-xl text-xs font-medium">
+          <button id="tabFormBtn" onclick="switchTab('form')" class="px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 bg-white text-brand-700 font-bold shadow-xs">
+            <i class="ph-bold ph-note-pencil"></i>
+            <span>投票</span>
+          </button>
+          <button id="tabStatsBtn" onclick="switchTab('stats')" class="px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-slate-500 hover:text-slate-800">
+            <i class="ph-bold ph-chart-bar"></i>
+            <span>結果</span>
+            <span id="badgeCount" class="px-1.5 py-0.2 bg-brand-500 text-white text-[10px] font-bold rounded-full">0</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 max-w-[90%] w-auto z-50 transform -translate-y-20 opacity-0 transition-all duration-300 pointer-events-none px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold text-white"></div>
+
+    <main class="flex-1 px-4 py-4 space-y-4">
+
+      <!-- Deadline Banner & Dynamic Countdown -->
+      <div id="deadlineContainer" class="bg-gradient-to-r from-stone-900 to-stone-800 text-white p-3.5 rounded-2xl shadow-sm border border-stone-700">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <div id="deadlineIconBox" class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <i class="ph-bold ph-hourglass-high text-sm"></i>
+            </div>
+            <div>
+              <span class="text-[10px] text-stone-300 block leading-tight font-medium">投票截止時間</span>
+              <span class="text-xs font-bold text-stone-100 tracking-tight">2026/11/14 (六) 中午 12:00</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span id="countdownLabel" class="text-[9px] text-stone-400 block font-medium">剩餘時間</span>
+            <span id="countdownDisplay" class="text-xs font-mono font-bold text-amber-300">計算中...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Closed Banner when expired -->
+      <div id="closedAlertBanner" class="hidden p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2.5 text-xs text-rose-800">
+        <i class="ph-bold ph-lock-key text-rose-600 text-base shrink-0"></i>
+        <div>
+          <span class="font-bold">投票已截止</span>
+          <p class="text-[11px] text-rose-700 mt-0.5">本次統計已於 2026/11/14 中午 12:00 結束，請切換至「結果」頁檢視最終統計。</p>
+        </div>
+      </div>
+
+      <!-- VIEW 1: Voting Form -->
+      <div id="viewForm" class="space-y-4">
+        <!-- Notice badge for single vote policy -->
+        <div class="p-3 bg-amber-50/70 border border-amber-200/60 rounded-2xl flex items-start gap-2.5 text-xs text-amber-900">
+          <i class="ph-bold ph-info text-amber-600 text-base shrink-0 mt-0.5"></i>
+          <div>
+            <span class="font-bold">每人僅限投票一次 (全家即時同步)</span>
+            <p class="text-[11px] text-amber-700/90 mt-0.5">已投過的稱謂在選單會被自動鎖定，送出後全體手機將即時更新。</p>
+          </div>
+        </div>
+
+        <form id="voteForm" onsubmit="handleSubmit(event)" class="space-y-4">
+          <!-- 1. 姓名 / 稱謂 (下拉式選單) -->
+          <div class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-bold text-slate-700">
+                1. 請選擇您的姓名 / 稱謂 <span class="text-red-500">*</span>
+              </label>
+              <span id="nameStatusTip" class="text-[11px] text-slate-400">一人一票</span>
+            </div>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <i class="ph-bold ph-user text-base"></i>
+              </span>
+              <select id="voterName" required onchange="handleNameChange()"
+                class="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 focus:border-black focus:ring-1 focus:ring-black outline-none text-sm transition appearance-none bg-white font-medium text-slate-700">
+                <option value="" disabled selected>連線載入中...</option>
+              </select>
+              <span class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">
+                <i class="ph-bold ph-caret-down text-base"></i>
+              </span>
+            </div>
+            <div id="votedAlert" class="hidden mt-2 p-2 bg-rose-50 border border-rose-100 rounded-lg text-rose-600 text-[11px] font-medium flex items-center gap-1.5">
+              <i class="ph-bold ph-warning-circle"></i>
+              <span>此稱謂已在雲端完成投票，如需修改請由「結果」頁撤銷後重投。</span>
+            </div>
+          </div>
+
+          <!-- 2. 餐廳選擇 -->
+          <div class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <label class="block text-xs font-bold text-slate-700 mb-2">
+              2. 餐廳選擇 <span class="text-red-500">*</span>
+            </label>
+            <div class="space-y-2">
+              <!-- Option A: 榮榮園 -->
+              <label class="cursor-pointer block">
+                <input type="radio" name="restaurant" value="榮榮園" checked onchange="toggleCustomRestaurant()" class="peer sr-only">
+                <div class="p-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                      <i class="ph-fill ph-cooking-pot text-brand-600"></i>
+                      榮榮園浙寧餐廳
+                    </span>
+                    <p class="text-[11px] text-slate-400 mt-0.5">經典老字號江浙菜、烤排骨光餅</p>
+                  </div>
+                  <div class="radio-circle-box shrink-0 ml-2">
+                    <div class="radio-circle-dot"></div>
+                  </div>
+                </div>
+              </label>
+
+              <!-- Option B: 其他建議餐廳 -->
+              <label class="cursor-pointer block">
+                <input type="radio" name="restaurant" value="其他建議" onchange="toggleCustomRestaurant()" class="peer sr-only">
+                <div class="p-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                      <i class="ph-bold ph-lightbulb text-amber-500"></i>
+                      其他建議餐廳
+                    </span>
+                    <p class="text-[11px] text-slate-400 mt-0.5">我有其他推薦口袋名單</p>
+                  </div>
+                  <div class="radio-circle-box shrink-0 ml-2">
+                    <div class="radio-circle-dot"></div>
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <!-- Custom Restaurant Input -->
+            <div id="customRestaurantWrapper" class="hidden mt-2.5 pt-2 border-t border-slate-100">
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">請填寫建議餐廳名稱：</label>
+              <input type="text" id="customRestaurant" placeholder="如：欣葉鐘菜、驥園川菜..."
+                class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-black focus:ring-1 focus:ring-black outline-none text-xs transition">
+            </div>
+          </div>
+
+          <!-- 3. 日期調查 -->
+          <div class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <div class="flex items-center justify-between mb-2">
+              <label class="text-xs font-bold text-slate-700">
+                3. 可出席日期 (可複選) <span class="text-red-500">*</span>
+              </label>
+              <span class="text-[11px] text-slate-400">可多選</span>
+            </div>
+            
+            <div class="space-y-2">
+              <!-- Date 1: 2027/1/30 -->
+              <label class="cursor-pointer block">
+                <input type="checkbox" name="dates" value="2027/1/30" onchange="handleDateSelect('single')" class="peer sr-only">
+                <div class="p-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-cyan-100 text-cyan-800 flex flex-col items-center justify-center font-bold text-[10px] shrink-0">
+                      <span>1/30</span>
+                      <span class="text-[9px] font-normal leading-none">六</span>
+                    </div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-900">2027/1/30 (週六中午)</p>
+                      <p class="text-[10px] text-slate-400">11:30 - 14:00</p>
+                    </div>
+                  </div>
+                  <div class="checkbox-indicator-box shrink-0">
+                    <i class="ph-bold ph-check text-xs"></i>
+                  </div>
+                </div>
+              </label>
+
+              <!-- Date 2: 2027/2/13 -->
+              <label class="cursor-pointer block">
+                <input type="checkbox" name="dates" value="2027/2/13" onchange="handleDateSelect('single')" class="peer sr-only">
+                <div class="p-3 rounded-xl border-2 border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-800 flex flex-col items-center justify-center font-bold text-[10px] shrink-0">
+                      <span>2/13</span>
+                      <span class="text-[9px] font-normal leading-none">六</span>
+                    </div>
+                    <div>
+                      <p class="text-xs font-bold text-slate-900">2027/2/13 (週六中午)</p>
+                      <p class="text-[10px] text-slate-400">11:30 - 14:00</p>
+                    </div>
+                  </div>
+                  <div class="checkbox-indicator-box shrink-0">
+                    <i class="ph-bold ph-check text-xs"></i>
+                  </div>
+                </div>
+              </label>
+
+              <!-- Quick option: 兩天皆可 -->
+              <label class="cursor-pointer block">
+                <input type="checkbox" id="bothDates" onchange="handleDateSelect('both')" class="peer sr-only">
+                <div class="p-2.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <i class="ph-bold ph-calendar-check text-emerald-600 text-base"></i>
+                    <span>兩天時間皆可出席</span>
+                  </div>
+                  <div class="checkbox-indicator-box shrink-0">
+                    <i class="ph-bold ph-check text-xs"></i>
+                  </div>
+                </div>
+              </label>
+
+              <!-- Quick option: 皆無法出席 -->
+              <label class="cursor-pointer block">
+                <input type="checkbox" id="noneDates" onchange="handleDateSelect('none')" class="peer sr-only">
+                <div class="p-2.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 peer-checked:border-black peer-checked:bg-slate-50 transition flex items-center justify-between">
+                  <div class="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <i class="ph-bold ph-prohibit text-rose-600 text-base"></i>
+                    <span>皆無法出席 / 不克前往</span>
+                  </div>
+                  <div class="checkbox-indicator-box shrink-0">
+                    <i class="ph-bold ph-check text-xs"></i>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 4. 出席人數 -->
+          <div id="headcountContainer" class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs transition">
+            <label class="block text-xs font-bold text-slate-700 mb-2">
+              4. 預計出席人數
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-xs font-bold text-slate-700">大人</span>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="adjustCount('adults', -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold active:bg-slate-100 flex items-center justify-center">-</button>
+                  <span id="adultsCount" class="w-5 text-center font-bold text-xs text-slate-800">1</span>
+                  <button type="button" onclick="adjustCount('adults', 1)" class="w-7 h-7 rounded-lg bg-black text-white font-bold active:scale-95 flex items-center justify-center">+</button>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                <span class="text-xs font-bold text-slate-700">小孩</span>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="adjustCount('kids', -1)" class="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold active:bg-slate-100 flex items-center justify-center">-</button>
+                  <span id="kidsCount" class="w-5 text-center font-bold text-xs text-slate-800">0</span>
+                  <button type="button" onclick="adjustCount('kids', 1)" class="w-7 h-7 rounded-lg bg-black text-white font-bold active:scale-95 flex items-center justify-center">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. 備註 -->
+          <div class="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">
+              5. 備註 / 飲食限制 (選填)
+            </label>
+            <textarea id="notes" rows="2" placeholder="如素食、海鮮過敏、需兒童椅..."
+              class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-black focus:ring-1 focus:ring-black outline-none text-xs transition"></textarea>
+          </div>
+
+          <!-- Submit Button -->
+          <button id="submitVoteBtn" type="submit" class="w-full py-3.5 px-4 rounded-2xl bg-black hover:bg-slate-800 active:scale-[0.98] text-white font-bold text-sm shadow-md transition flex items-center justify-center gap-1.5">
+            <i class="ph-bold ph-paper-plane-tilt text-base"></i>
+            <span id="submitBtnText">送出調查並看統計結果</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- VIEW 2: Real-time Statistics -->
+      <div id="viewStats" class="hidden space-y-4">
+
+        <!-- Progress Overview -->
+        <div class="p-3.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl shadow-sm">
+          <div class="flex items-center justify-between text-xs mb-1.5">
+            <span class="font-bold flex items-center gap-1.5">
+              <i class="ph-bold ph-users-three"></i>
+              投票進度
+            </span>
+            <span id="votedRateText" class="font-bold text-amber-300">0 / 8 人已投</span>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+            <div id="votedRateBar" class="bg-amber-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <p id="pendingVotersText" class="text-[10px] text-slate-300 mt-2 truncate">尚未投票：-</p>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="bg-white p-2.5 rounded-xl border border-slate-200">
+            <span class="text-[10px] text-slate-400 block font-medium">總出席人數</span>
+            <span id="kpiTotalHeadcount" class="text-xl font-extrabold text-brand-600 block leading-tight mt-0.5">0</span>
+            <span class="text-[9px] text-slate-400">大+小</span>
+          </div>
+          <div class="bg-white p-2.5 rounded-xl border border-slate-200">
+            <span class="text-[10px] text-slate-400 block font-medium">1/30 (六)</span>
+            <span id="kpiDate1Count" class="text-xl font-extrabold text-cyan-700 block leading-tight mt-0.5">0</span>
+            <span class="text-[9px] text-slate-400">票數</span>
+          </div>
+          <div class="bg-white p-2.5 rounded-xl border border-slate-200">
+            <span class="text-[10px] text-slate-400 block font-medium">2/13 (六)</span>
+            <span id="kpiDate2Count" class="text-xl font-extrabold text-indigo-700 block leading-tight mt-0.5">0</span>
+            <span class="text-[9px] text-slate-400">票數</span>
+          </div>
+        </div>
+
+        <!-- Date Chart -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <h3 class="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
+            <i class="ph-bold ph-calendar-blank text-cyan-600"></i>
+            日期票數分佈
+          </h3>
+          <div class="space-y-3" id="dateStatsContainer"></div>
+        </div>
+
+        <!-- Restaurant Chart -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+          <h3 class="text-xs font-bold text-slate-800 mb-3 flex items-center gap-1.5">
+            <i class="ph-bold ph-cooking-pot text-brand-600"></i>
+            餐廳偏好比例
+          </h3>
+          <div class="space-y-3" id="restaurantStatsContainer"></div>
+
+          <!-- Other recommended restaurants -->
+          <div class="mt-3.5 pt-3 border-t border-slate-100">
+            <span class="text-[11px] font-semibold text-slate-500 block mb-1.5">其他提議名單：</span>
+            <div id="suggestedRestaurantsList" class="flex flex-wrap gap-1 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- Detailed List -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div class="p-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-xs font-bold text-slate-800 flex items-center gap-1">
+              <i class="ph-bold ph-list-dashes"></i>
+              投票明細
+            </h3>
+            <div class="flex items-center gap-1.5">
+              <button onclick="fetchCloudData()" class="px-2 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1 transition" title="重新整理資料">
+                <i class="ph-bold ph-arrows-clockwise"></i>
+                <span>刷新</span>
+              </button>
+              <button onclick="exportToCSV()" class="px-2 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 flex items-center gap-1 transition">
+                <i class="ph-bold ph-download-simple"></i>
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="responseListContainer" class="divide-y divide-slate-100 text-xs"></div>
+          <div id="emptyTableState" class="p-6 text-center text-slate-400 text-xs hidden">
+            尚無任何投票紀錄
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Modal for Confirmation -->
+  <div id="modalOverlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-4 shadow-xl space-y-3 text-center">
+      <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+        <i class="ph-bold ph-warning text-lg"></i>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-800 text-sm" id="modalTitle">確認操作</h4>
+        <p class="text-xs text-slate-500 mt-1" id="modalDesc">確定要執行這項操作嗎？</p>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button onclick="closeModal()" class="flex-1 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">取消</button>
+        <button id="modalConfirmBtn" class="flex-1 py-2 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----------------------------------------------------
+    // Supabase 雲端資料庫設定
+    // ----------------------------------------------------
+    const SUPABASE_URL = "https://zvalhhmpkwiulqlfdphk.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_te933oX3VNWSPLS_BlzmZw_DEZT2yRp";
+    const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+    // 固定名單順序
+    const MEMBER_LIST = [
+      '大姑',
+      '二叔',
+      '小姑',
+      '三叔',
+      '小叔',
+      'CHERRY',
+      'ARNO',
+      '熊'
+    ];
+
+    // 截止時間: 2026/11/14 中午 12:00:00
+    const DEADLINE = new Date(2026, 10, 14, 12, 0, 0);
+    let isExpired = false;
+
+    let responses = [];
+    let adultCount = 1;
+    let kidCount = 0;
+    let isSubmitting = false;
+
+    window.onload = function () {
+      startDeadlineCountdown();
+      fetchCloudData();
+      subscribeRealtime();
+    };
+
+    // 啟動倒數計時
+    function startDeadlineCountdown() {
+      function updateClock() {
+        const now = new Date();
+        const diff = DEADLINE.getTime() - now.getTime();
+
+        const label = document.getElementById('countdownLabel');
+        const display = document.getElementById('countdownDisplay');
+        const iconBox = document.getElementById('deadlineIconBox');
+        const closedBanner = document.getElementById('closedAlertBanner');
+        const submitBtn = document.getElementById('submitVoteBtn');
+        const formContainer = document.getElementById('voteForm');
+
+        if (diff <= 0) {
+          isExpired = true;
+          label.innerText = '狀態';
+          display.innerHTML = '<span class="text-rose-400 font-bold">已截止</span>';
+          display.className = 'text-xs font-mono font-bold text-rose-400';
+          iconBox.className = 'w-7 h-7 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0';
+          iconBox.innerHTML = '<i class="ph-bold ph-lock-key text-sm"></i>';
+          closedBanner.classList.remove('hidden');
+
+          submitBtn.disabled = true;
+          submitBtn.classList.add('opacity-50', 'pointer-events-none');
+          submitBtn.innerHTML = '<i class="ph-bold ph-lock"></i><span>投票已結束</span>';
+          formContainer.classList.add('opacity-60', 'pointer-events-none');
+        } else {
+          isExpired = false;
+          closedBanner.classList.add('hidden');
+          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+          const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+          const mins = Math.floor((diff / (1000 * 60)) % 60);
+          const secs = Math.floor((diff / 1000) % 60);
+
+          if (days > 0) {
+            display.innerText = `${days}天 ${hours}時 ${mins}分`;
+          } else {
+            display.innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+          }
+        }
+      }
+
+      updateClock();
+      setInterval(updateClock, 1000);
+    }
+
+    // 從 Supabase 取得最新所有選票
+    async function fetchCloudData() {
+      if (!supabaseClient) {
+        showToast('無法初始化雲端連線', 'error');
+        return;
+      }
+
+      try {
+        const { data, error } = await supabaseClient
+          .from('poll_votes')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        responses = (data || []).map(item => ({
+          name: item.name,
+          restaurant: item.restaurant,
+          customRestaurant: item.other_restaurant || '',
+          dates: item.dates || [],
+          cannotAttend: (item.dates && item.dates.includes('皆無法出席')),
+          adults: item.adults ?? 1,
+          kids: item.kids ?? 0,
+          notes: item.note || '',
+          timestamp: item.created_at ? formatTime(item.created_at) : ''
+        }));
+
+        refreshVoterDropdown();
+        renderStats();
+        updateBadge();
+      } catch (err) {
+        console.error('Fetch cloud data failed:', err);
+        showToast('雲端資料同步中...', 'warning');
+      }
+    }
+
+    // 監聽 Supabase 即時變更 (Realtime)
+    function subscribeRealtime() {
+      if (!supabaseClient) return;
+      supabaseClient
+        .channel('public:poll_votes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'poll_votes' }, () => {
+          fetchCloudData();
+        })
+        .subscribe();
+    }
+
+    function formatTime(isoStr) {
+      try {
+        const d = new Date(isoStr);
+        return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+      } catch {
+        return '';
+      }
+    }
+
+    function updateBadge() {
+      const badge = document.getElementById('badgeCount');
+      if (badge) badge.innerText = responses.length;
+    }
+
+    // 更新下拉選單（自動將已投票成員設為 disabled）
+    function refreshVoterDropdown() {
+      const select = document.getElementById('voterName');
+      const votedNames = new Set(responses.map(r => r.name));
+      const currentSelected = select.value;
+
+      let html = `<option value="" disabled ${!currentSelected ? 'selected' : ''}>請選擇您的稱謂 / 名字</option>`;
+      MEMBER_LIST.forEach(name => {
+        const hasVoted = votedNames.has(name);
+        const disabledAttr = hasVoted ? 'disabled' : '';
+        const label = hasVoted ? `${name} (已投票)` : name;
+        const selectedAttr = (currentSelected === name && !hasVoted) ? 'selected' : '';
+        html += `<option value="${name}" ${disabledAttr} ${selectedAttr}>${label}</option>`;
+      });
+
+      select.innerHTML = html;
+      handleNameChange();
+    }
+
+    function handleNameChange() {
+      const select = document.getElementById('voterName');
+      const votedAlert = document.getElementById('votedAlert');
+      const submitBtn = document.getElementById('submitVoteBtn');
+      const chosen = select.value;
+      const hasVoted = responses.some(r => r.name === chosen);
+
+      if (isExpired) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'pointer-events-none');
+        return;
+      }
+
+      if (hasVoted) {
+        votedAlert.classList.remove('hidden');
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'pointer-events-none');
+      } else {
+        votedAlert.classList.add('hidden');
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function switchTab(tab) {
+      const viewForm = document.getElementById('viewForm');
+      const viewStats = document.getElementById('viewStats');
+      const tabFormBtn = document.getElementById('tabFormBtn');
+      const tabStatsBtn = document.getElementById('tabStatsBtn');
+
+      if (tab === 'form') {
+        viewForm.classList.remove('hidden');
+        viewStats.classList.add('hidden');
+        tabFormBtn.className = 'px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 bg-white text-brand-700 font-bold shadow-xs';
+        tabStatsBtn.className = 'px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-slate-500 hover:text-slate-800';
+      } else {
+        viewForm.classList.add('hidden');
+        viewStats.classList.remove('hidden');
+        tabStatsBtn.className = 'px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 bg-white text-brand-700 font-bold shadow-xs';
+        tabFormBtn.className = 'px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 text-slate-500 hover:text-slate-800';
+        fetchCloudData();
+      }
+    }
+
+    function toggleCustomRestaurant() {
+      const selected = document.querySelector('input[name="restaurant"]:checked')?.value;
+      const customWrapper = document.getElementById('customRestaurantWrapper');
+      const customInput = document.getElementById('customRestaurant');
+      if (selected === '其他建議') {
+        customWrapper.classList.remove('hidden');
+        customInput.focus();
+      } else {
+        customWrapper.classList.add('hidden');
+      }
+    }
+
+    function adjustCount(type, delta) {
+      if (type === 'adults') {
+        adultCount = Math.max(1, adultCount + delta);
+        document.getElementById('adultsCount').innerText = adultCount;
+      } else if (type === 'kids') {
+        kidCount = Math.max(0, kidCount + delta);
+        document.getElementById('kidsCount').innerText = kidCount;
+      }
+    }
+
+    function handleDateSelect(type) {
+      const check1 = document.querySelector('input[name="dates"][value="2027/1/30"]');
+      const check2 = document.querySelector('input[name="dates"][value="2027/2/13"]');
+      const checkBoth = document.getElementById('bothDates');
+      const checkNone = document.getElementById('noneDates');
+      const headcount = document.getElementById('headcountContainer');
+
+      if (type === 'both') {
+        if (checkBoth.checked) {
+          checkNone.checked = false;
+          check1.checked = true;
+          check2.checked = true;
+          headcount.classList.remove('opacity-40', 'pointer-events-none');
+        } else {
+          check1.checked = false;
+          check2.checked = false;
+        }
+      } else if (type === 'none') {
+        if (checkNone.checked) {
+          checkBoth.checked = false;
+          check1.checked = false;
+          check2.checked = false;
+          headcount.classList.add('opacity-40', 'pointer-events-none');
+        } else {
+          headcount.classList.remove('opacity-40', 'pointer-events-none');
+        }
+      } else if (type === 'single') {
+        checkNone.checked = false;
+        headcount.classList.remove('opacity-40', 'pointer-events-none');
+        checkBoth.checked = (check1.checked && check2.checked);
+      }
+    }
+
+    // 提交投票至 Supabase
+    async function handleSubmit(e) {
+      e.preventDefault();
+
+      if (new Date() >= DEADLINE) {
+        showToast('投票已截止（2026/11/14 中午12:00）！', 'error');
+        return;
+      }
+
+      if (isSubmitting) return;
+
+      const nameInput = document.getElementById('voterName');
+      const name = nameInput.value.trim();
+      if (!name) {
+        showToast('請選擇您的姓名 / 稱謂！', 'warning');
+        return;
+      }
+
+      const restType = document.querySelector('input[name="restaurant"]:checked')?.value || '榮榮園';
+      let customRest = '';
+      if (restType === '其他建議') {
+        customRest = document.getElementById('customRestaurant').value.trim();
+        if (!customRest) {
+          showToast('請填寫您推薦的餐廳名稱！', 'warning');
+          return;
+        }
+      }
+
+      const check1 = document.querySelector('input[name="dates"][value="2027/1/30"]').checked;
+      const check2 = document.querySelector('input[name="dates"][value="2027/2/13"]').checked;
+      const checkNone = document.getElementById('noneDates').checked;
+
+      let selectedDates = [];
+      if (checkNone) {
+        selectedDates = ['皆無法出席'];
+      } else {
+        if (check1) selectedDates.push('2027/1/30');
+        if (check2) selectedDates.push('2027/2/13');
+      }
+
+      if (selectedDates.length === 0) {
+        showToast('請勾選可出席日期或「皆無法出席」！', 'warning');
+        return;
+      }
+
+      isSubmitting = true;
+      const submitBtn = document.getElementById('submitVoteBtn');
+      const submitText = document.getElementById('submitBtnText');
+      submitBtn.disabled = true;
+      submitText.innerText = '雲端儲存中...';
+
+      try {
+        const payload = {
+          name: name,
+          restaurant: restType,
+          other_restaurant: customRest || null,
+          dates: selectedDates,
+          adults: checkNone ? 0 : adultCount,
+          kids: checkNone ? 0 : kidCount,
+          note: document.getElementById('notes').value.trim() || null
+        };
+
+        const { error } = await supabaseClient
+          .from('poll_votes')
+          .insert([payload]);
+
+        if (error) {
+          if (error.code === '23505') { // Primary key violation
+            showToast(`${name} 已經在雲端投票過了！`, 'error');
+          } else {
+            throw error;
+          }
+          return;
+        }
+
+        // 成功送出
+        showToast(`感謝 ${name}，雲端投票已完成！`, 'success');
+
+        // 重置表單
+        document.getElementById('voteForm').reset();
+        adultCount = 1;
+        kidCount = 0;
+        document.getElementById('adultsCount').innerText = '1';
+        document.getElementById('kidsCount').innerText = '0';
+        document.getElementById('customRestaurantWrapper').classList.add('hidden');
+        document.getElementById('headcountContainer').classList.remove('opacity-40', 'pointer-events-none');
+
+        await fetchCloudData();
+
+        setTimeout(() => {
+          switchTab('stats');
+        }, 300);
+
+      } catch (err) {
+        console.error('Submit failed:', err);
+        showToast('送出失敗，請檢查網路連線或稍後再試！', 'error');
+      } finally {
+        isSubmitting = false;
+        submitBtn.disabled = false;
+        submitText.innerText = '送出調查並看統計結果';
+      }
+    }
+
+    // 渲染儀表板與視覺化圖表
+    function renderStats() {
+      const totalResponses = responses.length;
+      const votedNames = new Set(responses.map(r => r.name));
+      const pendingNames = MEMBER_LIST.filter(m => !votedNames.has(m));
+
+      const ratePct = Math.round((totalResponses / MEMBER_LIST.length) * 100);
+      document.getElementById('votedRateText').innerText = `${totalResponses} / ${MEMBER_LIST.length} 人已投`;
+      document.getElementById('votedRateBar').style.width = `${ratePct}%`;
+
+      const pendingText = document.getElementById('pendingVotersText');
+      if (pendingNames.length === 0) {
+        pendingText.innerHTML = `<span class="text-emerald-400 font-semibold">🎉 全員 8 位皆已完成投票！</span>`;
+      } else {
+        pendingText.innerText = `尚未投票 (${pendingNames.length})：${pendingNames.join('、')}`;
+      }
+
+      let totalHeadcount = 0;
+      let date1Count = 0;
+      let date2Count = 0;
+      let cannotCount = 0;
+      let restaurantCounts = { '榮榮園': 0, '其他建議': 0 };
+      let customRestSuggestions = [];
+
+      responses.forEach(r => {
+        if (!r.cannotAttend) {
+          totalHeadcount += ((r.adults || 0) + (r.kids || 0));
+        } else {
+          cannotCount++;
+        }
+
+        if (r.dates && r.dates.includes('2027/1/30')) date1Count++;
+        if (r.dates && r.dates.includes('2027/2/13')) date2Count++;
+
+        if (r.restaurant === '榮榮園') {
+          restaurantCounts['榮榮園']++;
+        } else {
+          restaurantCounts['其他建議']++;
+          if (r.customRestaurant) {
+            customRestSuggestions.push({ name: r.customRestaurant, voter: r.name });
+          }
+        }
+      });
+
+      document.getElementById('kpiTotalHeadcount').innerText = totalHeadcount;
+      document.getElementById('kpiDate1Count').innerText = date1Count;
+      document.getElementById('kpiDate2Count').innerText = date2Count;
+
+      const dateStatsContainer = document.getElementById('dateStatsContainer');
+      const d1Pct = totalResponses ? Math.round((date1Count / totalResponses) * 100) : 0;
+      const d2Pct = totalResponses ? Math.round((date2Count / totalResponses) * 100) : 0;
+      const nonePct = totalResponses ? Math.round((cannotCount / totalResponses) * 100) : 0;
+
+      dateStatsContainer.innerHTML = `
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-slate-700 font-medium">1/30 (週六中午)</span>
+            <span class="font-bold text-slate-800">${date1Count} 票 (${d1Pct}%)</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div class="bg-cyan-600 h-full rounded-full progress-bar-fill" style="width: ${d1Pct}%"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-slate-700 font-medium">2/13 (週六中午)</span>
+            <span class="font-bold text-slate-800">${date2Count} 票 (${d2Pct}%)</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div class="bg-indigo-600 h-full rounded-full progress-bar-fill" style="width: ${d2Pct}%"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-slate-400 font-medium">皆無法出席</span>
+            <span class="font-bold text-slate-500">${cannotCount} 票 (${nonePct}%)</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div class="bg-slate-400 h-full rounded-full progress-bar-fill" style="width: ${nonePct}%"></div>
+          </div>
+        </div>
+      `;
+
+      const restContainer = document.getElementById('restaurantStatsContainer');
+      const rongCount = restaurantCounts['榮榮園'] || 0;
+      const otherCount = restaurantCounts['其他建議'] || 0;
+      const rPct = totalResponses ? Math.round((rongCount / totalResponses) * 100) : 0;
+      const oPct = totalResponses ? Math.round((otherCount / totalResponses) * 100) : 0;
+
+      restContainer.innerHTML = `
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-slate-700 font-semibold">榮榮園浙寧餐廳</span>
+            <span class="font-bold text-slate-800">${rongCount} 票 (${rPct}%)</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div class="bg-brand-500 h-full rounded-full progress-bar-fill" style="width: ${rPct}%"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-slate-700 font-semibold">其他建議餐廳</span>
+            <span class="font-bold text-slate-800">${otherCount} 票 (${oPct}%)</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+            <div class="bg-amber-400 h-full rounded-full progress-bar-fill" style="width: ${oPct}%"></div>
+          </div>
+        </div>
+      `;
+
+      const sugList = document.getElementById('suggestedRestaurantsList');
+      if (customRestSuggestions.length === 0) {
+        sugList.innerHTML = `<span class="text-slate-400 text-[11px] italic">目前皆選榮榮園</span>`;
+      } else {
+        sugList.innerHTML = customRestSuggestions.map(item => `
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-[11px]">
+            <strong>${escapeHtml(item.name)}</strong>
+            <span class="text-[10px] text-amber-600">(${escapeHtml(item.voter)})</span>
+          </span>
+        `).join('');
+      }
+
+      renderList();
+    }
+
+    function renderList() {
+      const container = document.getElementById('responseListContainer');
+      const emptyState = document.getElementById('emptyTableState');
+
+      if (responses.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      container.innerHTML = responses.map((r) => {
+        let dateBadges = '';
+        if (r.cannotAttend) {
+          dateBadges = `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 font-medium text-[10px] border border-rose-100">無法出席</span>`;
+        } else {
+          dateBadges = (r.dates || []).map(d => {
+            return `<span class="px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-800 font-medium text-[10px] border border-cyan-100 mr-1">${d}</span>`;
+          }).join('') || '<span class="text-slate-400 text-[10px]">未選</span>';
+        }
+
+        const restaurantDisplay = r.restaurant === '其他建議'
+          ? `<span class="text-amber-700 font-medium">其他: ${escapeHtml(r.customRestaurant || '未填寫')}</span>`
+          : `<span class="text-brand-700 font-semibold">榮榮園</span>`;
+
+        return `
+          <div class="p-3 flex items-start justify-between gap-2">
+            <div class="space-y-1 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-sm text-slate-800">${escapeHtml(r.name)}</span>
+                <span class="text-[10px] text-slate-400">${r.timestamp || ''}</span>
+              </div>
+              <div class="text-xs text-slate-600 flex flex-wrap items-center gap-1.5">
+                ${restaurantDisplay}
+                <span class="text-slate-300">|</span>
+                <span>${r.cannotAttend ? '不出席' : `${r.adults}大${r.kids}小 (共${(r.adults||0)+(r.kids||0)}人)`}</span>
+              </div>
+              <div class="pt-0.5">${dateBadges}</div>
+              ${r.notes ? `<div class="text-[11px] text-slate-500 bg-slate-50 p-1.5 rounded-lg border border-slate-100 mt-1">備註：${escapeHtml(r.notes)}</div>` : ''}
+            </div>
+            <button onclick="confirmDeleteOne('${escapeHtml(r.name)}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg active:bg-rose-50 transition shrink-0" title="撤銷這筆紀錄並重新開放投票">
+              <i class="ph-bold ph-trash text-base"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function confirmDeleteOne(name) {
+      const modal = document.getElementById('modalOverlay');
+      const title = document.getElementById('modalTitle');
+      const desc = document.getElementById('modalDesc');
+      const confirmBtn = document.getElementById('modalConfirmBtn');
+
+      title.innerText = '撤銷雲端紀錄';
+      desc.innerText = `確定要撤銷「${name}」的投票紀錄嗎？撤銷後該成員可重新投票。`;
+      confirmBtn.onclick = async function() {
+        closeModal();
+        try {
+          const { error } = await supabaseClient
+            .from('poll_votes')
+            .delete()
+            .eq('name', name);
+
+          if (error) throw error;
+          showToast(`已自雲端移除 ${name} 的紀錄！`, 'info');
+          fetchCloudData();
+        } catch (e) {
+          console.error(e);
+          showToast('刪除失敗，請檢查權限！', 'error');
+        }
+      };
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.add('hidden');
+    }
+
+    function exportToCSV() {
+      if (responses.length === 0) {
+        showToast('目前無資料可供匯出！', 'warning');
+        return;
+      }
+
+      const headers = ['姓名', '餐廳選擇', '建議餐廳備註', '可出席日期', '大人人數', '小孩人數', '總人數', '飲食限制與備註', '投票時間'];
+      const rows = responses.map(r => [
+        `"${(r.name || '').replace(/"/g, '""')}"`,
+        `"${(r.restaurant || '').replace(/"/g, '""')}"`,
+        `"${(r.customRestaurant || '').replace(/"/g, '""')}"`,
+        `"${(r.cannotAttend ? '皆無法出席' : (r.dates || []).join('; ')).replace(/"/g, '""')}"`,
+        r.cannotAttend ? 0 : (r.adults || 0),
+        r.cannotAttend ? 0 : (r.kids || 0),
+        r.cannotAttend ? 0 : ((r.adults || 0) + (r.kids || 0)),
+        `"${(r.notes || '').replace(/"/g, '""')}"`,
+        `"${(r.timestamp || '').replace(/"/g, '""')}"`
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `2027聚餐統計_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('已下載最新雲端 CSV！', 'success');
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.getElementById('toast');
+      toast.innerText = message;
+
+      let bgClass = 'bg-slate-900';
+      if (type === 'success') bgClass = 'bg-emerald-600';
+      if (type === 'error') bgClass = 'bg-rose-600';
+      if (type === 'warning') bgClass = 'bg-amber-600';
+
+      toast.className = `fixed top-4 left-1/2 -translate-x-1/2 max-w-[90%] w-auto z-50 transition-all duration-300 px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold text-white ${bgClass} translate-y-0 opacity-100`;
+
+      setTimeout(() => {
+        toast.className = toast.className.replace('translate-y-0 opacity-100', '-translate-y-20 opacity-0');
+      }, 2600);
+    }
+
+    function escapeHtml(string) {
+      if (!string) return '';
+      return String(string)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
